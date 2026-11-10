@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<!-- saved from url=(0112)file:///C:/Users/tukui/OneDrive/Microsoft%20Copilot%20Chat%20%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB/golfcanon.html -->
+<html lang="ja"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ゴルフボール・キャノン - バウンド的版</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            color: white;
+            overflow: hidden;
+            user-select: none;
+        }
+        h1 { margin: 10px 0 5px 0; font-size: 20px; color: #4caf50; }
+        #score-board { font-size: 16px; margin-bottom: 5px; }
+        canvas {
+            background-color: #87ceeb; /* 空の色 */
+            display: block;
+            margin: 0 auto;
+            border: 4px solid #fff;
+            border-radius: 8px;
+            max-width: 100%;
+            height: auto;
+        }
+        #instructions { margin-top: 10px; font-size: 13px; color: #ccc; }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 ゴルフボール・キャノン (ターゲットバウンド版)</h1>
+    <div id="score-board">スコア: <span id="score">0</span> | 残り球数: <span id="ammo">5</span></div>
+    
+    <canvas id="gameCanvas" width="500" height="360"></canvas>
+    
+    <div id="instructions">ボールを左右に移動 ➡️ 下に引っ張って、跳ね回る的を狙い撃て！</div>
+
+<script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // --- ゲームデータ設定 ---
+    let score = 0;
+    let ammo = 5;
+    let gameOver = false;
+
+    // 自機（ゴルフボール）の設定
+    const cannon = { x: 150, y: 305, angle: 0, power: 10, radius: 15 };
+    
+    // 【大幅変更】ターゲットに速度(vx, vy)と、跳ね返りの物理パラメーターを追加
+    const target = { 
+        x: 250, y: 60, radius: 15, 
+        vx: 3, vy: 2, 
+        gravity: 0.1,    // ターゲットにかかる重力（フワッと落ちる）
+        bounce: -0.98    // 跳ね返り係数（1に近づくほど勢いが落ちずに跳ね返る）
+    };
+    
+    // 障害物の壁（中央の浮遊ブロック）
+    const wall = { x: 150, y: 180, width: 200, height: 25 };
+
+    // 飛ばされる球の設定
+    const ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 10, isFlying: false };
+    const ballGravity = 0.25; 
+
+    // 操作モードの管理用
+    let inputMode = "none"; 
+    let touchStart = { x: 0, y: 0 };
+    let dragOffset = 0;
+
+    // 的が当たったときのリセット処理（出現位置と最初の飛び出す方向をランダムに）
+    function resetTarget() {
+        target.x = 100 + Math.random() * 300;
+        target.y = 40 + Math.random() * 60;
+        
+        // スコアが上がるほどバウンドの初速がスピードアップ
+        let baseSpeed = 3 + (score * 0.3);
+        target.vx = (Math.random() > 0.5 ? 1 : -1) * baseSpeed;
+        target.vy = Math.random() * baseSpeed;
+    }
+
+    // --- 入力イベントの制御 ---
+    function handleStart(x, y) {
+        if (ball.isFlying || gameOver) return;
+        let dx = x - cannon.x;
+        let dy = y - cannon.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 20) {
+            inputMode = "aim";
+            touchStart.x = cannon.x;
+            touchStart.y = cannon.y;
+        } else if (dist < 50) {
+            inputMode = "move";
+            dragOffset = cannon.x - x;
+        }
+    }
+
+    function handleMove(x, y) {
+        if (inputMode === "move") {
+            cannon.x = x + dragOffset;
+            if (cannon.x < cannon.radius) cannon.x = cannon.radius;
+            if (cannon.x > canvas.width - cannon.radius) cannon.x = canvas.width - cannon.radius;
+        } else if (inputMode === "aim") {
+            let dx = touchStart.x - x;
+            let dy = touchStart.y - y;
+            cannon.angle = Math.atan2(dy, dx);
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            cannon.power = Math.min(dist * 0.15, 18);
+        }
+    }
+
+    function handleEnd() {
+        if (inputMode === "aim") {
+            inputMode = "none";
+            if (cannon.power < 2) return;
+
+            ball.x = cannon.x;
+            ball.y = cannon.y;
+            ball.vx = Math.cos(cannon.angle) * cannon.power;
+            ball.vy = Math.sin(cannon.angle) * cannon.power;
+            ball.isFlying = true;
+            ammo--;
+            document.getElementById("ammo").textContent = ammo;
+        } else if (inputMode === "move") {
+            inputMode = "none";
+        }
+    }
+
+    // PC用イベント
+    canvas.addEventListener("mousedown", (e) => { const rect = canvas.getBoundingClientRect(); handleStart(e.clientX - rect.left, e.clientY - rect.top); });
+    window.addEventListener("mousemove", (e) => { const rect = canvas.getBoundingClientRect(); handleMove(e.clientX - rect.left, e.clientY - rect.top); });
+    window.addEventListener("mouseup", handleEnd);
+
+    // スマホ用イベント
+    canvas.addEventListener("touchstart", (e) => { e.preventDefault(); const rect = canvas.getBoundingClientRect(); const t = e.touches; handleStart(t.clientX - rect.left, t.clientY - rect.top); });
+    canvas.addEventListener("touchmove", (e) => { const rect = canvas.getBoundingClientRect(); const t = e.touches; handleMove(t.clientX - rect.left, t.clientY - rect.top); });
+    window.addEventListener("touchend", handleEnd);
+
+    // ゴルフボール描画関数
+    function drawGolfBall(x, y, radius) {
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.strokeStyle = "#cccccc";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.closePath();
+
+        ctx.fillStyle = "#e0e0e0";
+        const offset = radius * 0.4;
+        const dSize = radius * 0.15;
+        const dimples = [
+            {dx: 0, dy: 0}, {dx: -offset, dy: 0}, {dx: offset, dy: 0},
+            {dx: 0, dy: -offset}, {dx: 0, dy: offset},
+            {dx: -offset*0.7, dy: -offset*0.7}, {dx: offset*0.7, dy: -offset*0.7},
+            {dx: -offset*0.7, dy: offset*0.7}, {dx: offset*0.7, dy: offset*0.7}
+        ];
+        dimples.forEach(d => {
+            ctx.beginPath();
+            ctx.arc(x + d.dx, y + d.dy, dSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.closePath();
+        });
+    }
+
+    // --- メインループ処理 ---
+    function gameLoop() {
+        ctx.fillStyle = "#87ceeb";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 地面
+        ctx.fillStyle = "#8b5a2b";
+        ctx.fillRect(0, 330, canvas.width, 30);
+        ctx.fillStyle = "#4caf50";
+        ctx.fillRect(0, 320, canvas.width, 10);
+
+        // 障害物の壁（浮遊ブロック）
+        ctx.fillStyle = "#7e57c2";
+        ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+
+        // 【新設】ターゲットの本格物理バウンド計算
+        if (!gameOver) {
+            target.vy += target.gravity; // ターゲットに常に重力をかける
+            target.x += target.vx;
+            target.y += target.vy;
+
+            // 左右の壁でのバウンド判定
+            if (target.x < target.radius) {
+                target.x = target.radius;
+                target.vx *= target.bounce;
+            } else if (target.x > canvas.width - target.radius) {
+                target.x = canvas.width - target.radius;
+                target.vx *= target.bounce;
+            }
+
+            // 天井（上端）でのバウンド判定
+            if (target.y < target.radius) {
+                target.y = target.radius;
+                target.vy *= target.bounce;
+            }
+            // 地面（芝生の上）でのバウンド判定：下まで落ちたら上に勢いよく跳ね返る
+            else if (target.y > 320 - target.radius) {
+                target.y = 320 - target.radius;
+                target.vy *= target.bounce;
+            }
+
+            // 浮遊ブロック（中央の壁）との跳ね返り判定
+            if (target.x + target.radius > wall.x && target.x - target.radius < wall.x + wall.width &&
+                target.y + target.radius > wall.y && target.y - target.radius < wall.y + wall.height) {
+                // ブロックの上面・下面での衝突
+                if (target.x > wall.x && target.x < wall.x + wall.width) {
+                    target.vy *= target.bounce;
+                    if (target.y < wall.y) target.y = wall.y - target.radius;
+                    else target.y = wall.y + wall.height + target.radius;
+                } else { // 側面での衝突
+                    target.vx *= target.bounce;
+                    if (target.x < wall.x) target.x = wall.x - target.radius;
+                    else target.x = wall.x + wall.width + target.radius;
+                }
+            }
+        }
+
+        // ターゲットの描画
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#e91e63";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, target.radius * 0.6, 0, Math.PI * 2);
+        ctx.fillStyle = "#fff";
+        ctx.fill();
+        ctx.closePath();
+
+        // 発射前のボールの描画
+        if (!ball.isFlying && !gameOver) {
+            drawGolfBall(cannon.x, cannon.y, cannon.radius);
+            if (inputMode === "none") {
+                ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+                ctx.font = "11px Arial";
+                ctx.fillText("◀ ドラッグで移動 ▶", cannon.x - 50, cannon.y - 22);
+            }
+            if (inputMode === "aim") {
+                ctx.beginPath();
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+                ctx.lineWidth = 3;
+                let pullX = cannon.x - Math.cos(cannon.angle) * (cannon.power * 5);
+                let pullY = cannon.y - Math.sin(cannon.angle) * (cannon.power * 5);
+                ctx.moveTo(cannon.x, cannon.y);
+                ctx.lineTo(pullX, pullY);
+                ctx.stroke();
+                ctx.closePath();
+            }
+        }
+
+        // ガイドライン（予測線）の描画
+        if (inputMode === "aim") {
+            ctx.beginPath();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+            ctx.lineWidth = 2;
+            let simX = cannon.x;
+            let simY = cannon.y;
+            let simVx = Math.cos(cannon.angle) * cannon.power;
+            let simVy = Math.sin(cannon.angle) * cannon.power;
+            ctx.moveTo(simX, simY);
+            for (let i = 0; i < 30; i++) {
+                simX += simVx;
+                simY += simVy;
+                simVy += ballGravity;
+                ctx.lineTo(simX, simY);
+            }
+            ctx.stroke();
+        }
+
+        // 飛んでいるボールの描画と判定
+        if (ball.isFlying) {
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+            ball.vy += ballGravity;
+
+drawGolfBall(ball.x, ball.y, ball.radius);
+// 壁（ブロック）との衝突
+if (ball.x + ball.radius > wall.x && ball.x - ball.radius < wall.x + wall.width &&
+ball.y + ball.radius > wall.y && ball.y - ball.radius < wall.y + wall.height) {
+ball.isFlying = false;
+checkGameOver();
+}
+// ターゲットとの衝突
+let dx = ball.x - target.x;
+let dy = ball.y - target.y;
+let dist = Math.sqrt(dx * dx + dy * dy);
+if (dist < ball.radius + target.radius) {
+score++;
+ammo += 2;
+document.getElementById("score").textContent = score;
+document.getElementById("ammo").textContent = ammo;
+ball.isFlying = false;
+resetTarget();
+}
+// 画面外、地面判定
+if (ball.y > 320 || ball.x > canvas.width || ball.x < 0) {
+ball.isFlying = false;
+checkGameOver();
+}
+}
+// ゲームオーバー画面
+if (gameOver) {
+ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.fillStyle = "red";
+ctx.font = "bold 30px Arial";
+ctx.fillText("GAME OVER", 160, 160);
+ctx.fillStyle = "white";
+ctx.font = "20px Arial";
+ctx.fillText("画面タップでリトライ", 160, 210);
+}
+requestAnimationFrame(gameLoop);
+}
+function checkGameOver() {
+if (ammo <= 0 && !ball.isFlying) { gameOver = true; }
+}
+function resetGame() {
+score = 0; ammo = 5; gameOver = false; ball.isFlying = false;
+cannon.x = 150;
+document.getElementById("score").textContent = score;
+document.getElementById("ammo").textContent = ammo;
+resetTarget();
+}
+canvas.addEventListener("click", () => { if (gameOver) resetGame(); });
+resetTarget();
+gameLoop();
+</script></body></html>
